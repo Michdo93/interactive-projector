@@ -37,7 +37,7 @@ By mounting a Kinect v2 directly onto or next to a projector, this software moni
 
 ### 1. Clone or Extract Repository
 ```bash
-git clone https://github.com/your-username/interactive-projector.git
+git clone https://github.com/Michdo93/interactive-projector.git
 cd interactive-projector
 ```
 
