@@ -44,6 +44,56 @@ controls the mouse cursor)
 
 ---
 
+## 🏗️ How it works
+
+In short: **The Kinect measures in millimeters/meters**, your **screen uses pixels**—and calibration creates the “translation dictionary” between the two worlds.
+
+### 1. Why do I have to click on the 4 corners? (Homography)
+
+The Kinect sees the world from a distorted bird's-eye view or at an angle from above. The projector casts the image onto the table at an angle.
+
+If the projector displays a red dot in the upper-left corner with the coordinates **(X: 0, Y: 0)** and you click on that dot in the camera image at camera sensor pixel **(X: 142, Y: 89)**, the program knows:
+
+> *“Ah, I see! If the Kinect’s finger later points to camera pixel (142, 89), the user actually wants to control projector pixel (0, 0).”*
+
+Using the four corners, the math (the so-called **homography matrix**) calculates exactly how the projected rectangle on the table is rotated, distorted, or scaled in the camera image. This means it doesn't matter at all how far away the projector is or how crooked it is mounted.
+
+### 2. What about the resolutions? (Client 1920px vs. Pi/Kinect 1200px / 640px)
+
+The Kinect couldn't care less about that!
+
+1. **The Kinect has its own sensor:** A standard Kinect v1, for example, provides a depth image of **$640 \times 480$ pixels**. For each point in this image, there is a distance value in **millimeters**.
+2. **The client has its own display resolution:** For example, **$1920 \times 1080$ pixels**.
+3. **The math handles the conversion:** If, according to Kinect, your hand is at 50% of the projected width, the system sends the event to pixel `960` on the client. The system converts the Kinect area **proportionally** to the client's resolution. The resolution of the server or the Pi is irrelevant in this context.
+
+### 3. What is the maximum detectable range of the Kinect?
+
+That depends on two factors: the **field of view** and the **camera's range**.
+
+#### Maximum Distance & Measurement Range:
+
+* **Kinect v1 (Xbox 360 / Model 1414/1473):**
+* **Recommended distance:** approx. **0.8 m to 3.5 m** (it can't detect anything below 0.8 m, and becomes extremely inaccurate above 3.5 m).
+
+
+* **Kinect v2 (Xbox One / Model 1520):**
+* **Recommended distance:** approx. **0.5 m to 4.5 m**.
+
+
+* **Azure Kinect (DK):**
+* **Recommended distance:** approx. **0.25 m to 3.8 m** (depending on the depth mode).
+
+#### Maximum area on the table/wall:
+
+The Kinect has a fixed field of view (Kinect v1: approx. 57° horizontally, 43° vertically). This means: **The farther away the Kinect is mounted, the larger the area it can see.**
+
+* If the Kinect v1 is suspended **1.5 meters** above the table, it covers an area of approximately **$1.60 \text{ m} \times 1.20 \text{ m}$**.
+* If it is suspended **2.5 meters** away, it covers an area of just under **$2.70 \text{ m} \times 2.00 \text{ m}$**.
+
+> **The projector is usually the bottleneck:** The projector determines how large your touch area actually is. The Kinect simply needs to be mounted high enough or far enough away so that the entire projected image is within the Kinect's field of view.
+
+---
+
 ## 🛠️ Hardware Requirements
 
 * **Projector:** Short-Throw or Ultra-Short-Throw projector recommended (>= 2500 ANSI Lumens, 1080p).
