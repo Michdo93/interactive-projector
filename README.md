@@ -247,7 +247,7 @@ sudo cp services/interactive-projector-standalone.service /etc/systemd/system/
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable interactive-projector-standalone.service
-sudo
+sudo systemctl start interactive-projector-standalone.service
 ```
 
 ##### Server
@@ -275,7 +275,7 @@ sudo cp services/interactive-projector-client.service /etc/systemd/system/
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable interactive-projector-client.service
-sudo
+sudo systemctl start interactive-projector-client.service
 ```
 
 #### On Windows (PowerShell)
