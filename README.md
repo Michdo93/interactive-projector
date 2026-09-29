@@ -72,15 +72,15 @@ That depends on two factors: the **field of view** and the **camera's range**.
 
 #### Maximum Distance & Measurement Range:
 
-* **Kinect v1 (Xbox 360 / Model 1414/1473):**
+**Kinect v1 (Xbox 360 / Model 1414/1473):**
 * **Recommended distance:** approx. **0.8 m to 3.5 m** (it can't detect anything below 0.8 m, and becomes extremely inaccurate above 3.5 m).
 
 
-* **Kinect v2 (Xbox One / Model 1520):**
+**Kinect v2 (Xbox One / Model 1520):**
 * **Recommended distance:** approx. **0.5 m to 4.5 m**.
 
 
-* **Azure Kinect (DK):**
+**Azure Kinect (DK):**
 * **Recommended distance:** approx. **0.25 m to 3.8 m** (depending on the depth mode).
 
 #### Maximum area on the table/wall:
