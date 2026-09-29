@@ -347,3 +347,34 @@ Set-ExecutionPolicy Unrestricted -Scope Process
 Set-ExecutionPolicy Unrestricted -Scope Process
 .\services\install-windows-service.ps1 -Mode client
 ```
+
+---
+
+## ❓ Common Questions
+
+### 1. Does USB/IP work with the Kinect v2?
+
+**No, it does not work reliably.** The Kinect v2 transmits an uncompressed USB 3.0 isochronous data stream with extremely high bandwidth ($\approx 2\text{–}3\text{ Gbit/s}$). When using USB/IP, this stream either continuously drops out or causes extremely high latency.
+
+### 2. What is the best way for the client and server to communicate?
+
+The server processes the depth data locally using OpenCV. When a touch is detected, it sends a small, lightweight coordinate signal (just a few bytes) via **network socket (TUIO / UDP or WebSockets)** over Wi-Fi or Ethernet to your client. A lightweight client script runs on the client to control the mouse.
+
+### 3. Can dragging motions (dragging/slider) be detected?
+
+**Yes, absolutely.** The system sends a continuous stream of `Mouse Down`, `Mouse Move`, and `Mouse Up` events:
+
+* **Finger touches the surface:** `Mouse Down` at position $(X_1, Y_1)$.
+* **Finger swipes across the slider:** Continuous `Mouse Move` at $(X_2, Y_2)$, $(X_3, Y_3)$, etc.
+* **Finger lifts off:** `Mouse Up`.
+
+### 4. Can we distinguish between left-click and right-click?
+
+**This is very difficult with the Kinect alone**, since it only measures a flat depth map and does not have two finger buttons.
+**Possible solutions:**
+
+* **Default behavior:** Single tap = **left-click** (as on a smartphone or tablet).
+* **Hold-to-Right-Click:** If your finger remains stationary in the same spot for longer than $1\text{ second}$, the system triggers a **right-click**.
+* **Multi-finger gesture:** By touching two contours close together (two-finger tap), the software can trigger a right-click.
+
+So far, only the left-click has been implemented.
