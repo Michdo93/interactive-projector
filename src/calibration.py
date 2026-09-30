@@ -1,74 +1,122 @@
+"""Touch-based homography calibration between depth sensor and projector.
+
+The projected targets are invisible in the depth image, so instead of clicking into a
+depth preview the user touches each projected target with a finger. The touch detector
+(which already knows the empty surface) measures where the fingertip is in camera
+pixels. Any mirroring, rotation or keystone distortion is absorbed by the homography.
+"""
+
+import time
+
 import cv2
 import numpy as np
 
 
+class CalibrationAborted(Exception):
+    pass
+
+
 class Calibrator:
-    """Calculates 2D Perspective Homography Matrix between Kinect and Projector."""
+    def __init__(self, config: dict):
+        self.proj_w = int(config["PROJECTOR_WIDTH"])
+        self.proj_h = int(config["PROJECTOR_HEIGHT"])
+        self.margin = int(config["CALIBRATION_MARGIN_PX"])
+        self.n_points = 9 if int(config["CALIBRATION_POINTS"]) >= 9 else 4
+        self.hold_sec = float(config["CALIBRATION_HOLD_SEC"])
+        self.max_jitter = float(config["CALIBRATION_MAX_JITTER_PX"])
+        self.release_sec = 0.4
+        self.proj_points = self._target_points()
 
-    def __init__(self, proj_w: int, proj_h: int):
-        self.proj_w = proj_w
-        self.proj_h = proj_h
+    def _target_points(self) -> np.ndarray:
+        m, w, h = self.margin, self.proj_w, self.proj_h
+        if self.n_points == 4:
+            pts = [[m, m], [w - m, m], [w - m, h - m], [m, h - m]]
+        else:
+            xs, ys = [m, w // 2, w - m], [m, h // 2, h - m]
+            pts = [[x, y] for y in ys for x in xs]
+        return np.float32(pts)
 
-        # Define 4 target points on projected space with a safety margin
-        margin = 100
-        self.proj_points = np.float32([
-            [margin, margin],
-            [self.proj_w - margin, margin],
-            [self.proj_w - margin, self.proj_h - margin],
-            [margin, self.proj_h - margin]
-        ])
-        self.cam_points = []
+    def run(self, sensor, detector, display, log=print) -> np.ndarray:
+        """Runs the calibration. `display` must provide show(), poll() and close().
 
-    def run_calibration(self, sensor) -> np.ndarray:
-        """Displays target points on projector and captures user clicks in camera frame."""
-        cv2.namedWindow("Projector Calibration", cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty("Projector Calibration", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.namedWindow("Kinect Depth Preview")
+        Returns the 3x3 homography (camera -> projector).
+        Raises CalibrationAborted if the user presses q/ESC.
+        """
+        log("\n=== CALIBRATION ===")
+        log("Touch each projected target with ONE fingertip and hold it until the ring is full.")
+        cam_points = []
+        total = len(self.proj_points)
+        try:
+            for idx, target in enumerate(self.proj_points):
+                tx, ty = int(target[0]), int(target[1])
+                cam_pt = self._capture_point(sensor, detector, display, idx, total, tx, ty)
+                cam_points.append(cam_pt)
+                log(f"[Calibration] Target {idx + 1}/{total}: projector ({tx}, {ty}) "
+                    f"<- camera ({cam_pt[0]:.1f}, {cam_pt[1]:.1f})")
+        finally:
+            display.close()
 
-        def mouse_click(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN and len(self.cam_points) < 4:
-                self.cam_points.append([x, y])
-                print(f"[Calibration] Target {len(self.cam_points)} selected at camera coords: ({x}, {y})")
+        src = np.array(cam_points, dtype=np.float32)
+        homography, _ = cv2.findHomography(src, self.proj_points, 0)
+        if homography is None:
+            raise RuntimeError("Homography could not be computed (degenerate target positions).")
 
-        cv2.setMouseCallback("Kinect Depth Preview", mouse_click)
+        # Reprojection error as quality indicator
+        mapped = cv2.perspectiveTransform(src.reshape(-1, 1, 2), homography).reshape(-1, 2)
+        err = np.linalg.norm(mapped - self.proj_points, axis=1)
+        log(f"[Calibration] Homography computed. Mean reprojection error: {err.mean():.1f} px\n")
+        return homography
 
-        print("\n=== CALIBRATION INSTRUCTIONS ===")
-        print("Click on the corresponding projected red circle in the 'Kinect Depth Preview' window.\n")
+    def _capture_point(self, sensor, detector, display, idx, total, tx, ty):
+        samples = []
+        hold_start = None
+        progress = 0.0
 
-        while len(self.cam_points) < 4:
-            depth_frame = None
-            while depth_frame is None:
-                depth_frame = sensor.get_depth_frame()
+        # Phase 1: wait for a stable touch held for hold_sec
+        while True:
+            self._check_abort(display)
+            frame = sensor.get_depth_frame()
+            if frame is None:
+                display.show(idx, total, tx, ty, progress, "touch" if progress == 0 else "hold")
+                time.sleep(0.005)
+                continue
+            point, _ = detector.detect(frame)
+            now = time.monotonic()
+            if point is None:
+                samples, hold_start, progress = [], None, 0.0
+            else:
+                samples.append(point)
+                if hold_start is None:
+                    hold_start = now
+                arr = np.array(samples)
+                if np.max(np.linalg.norm(arr - np.median(arr, axis=0), axis=1)) > self.max_jitter:
+                    samples, hold_start = [point], now   # finger moved -> restart
+                progress = min(1.0, (now - hold_start) / self.hold_sec) if self.hold_sec > 0 else 1.0
+                if progress >= 1.0:
+                    result = tuple(np.median(np.array(samples), axis=0))
+                    break
+            display.show(idx, total, tx, ty, progress, "touch" if progress == 0 else "hold")
 
-            # Visualize depth map
-            depth_vis = cv2.normalize(depth_frame, None, 0, 255, cv2.NORM_MINMAX)
-            depth_vis = cv2.applyColorMap(depth_vis.astype(np.uint8), cv2.COLORMAP_JET)
+        # Phase 2: wait until the finger is lifted (avoid reusing the same touch)
+        released_since = None
+        while True:
+            self._check_abort(display)
+            display.show(idx, total, tx, ty, 1.0, "release")
+            frame = sensor.get_depth_frame()
+            if frame is None:
+                time.sleep(0.005)
+                continue
+            point, _ = detector.detect(frame)
+            now = time.monotonic()
+            if point is None:
+                released_since = released_since or now
+                if now - released_since >= self.release_sec:
+                    return result
+            else:
+                released_since = None
 
-            # Draw current projection target
-            proj_img = np.zeros((self.proj_h, self.proj_w, 3), dtype=np.uint8)
-            idx = len(self.cam_points)
-            target = tuple(self.proj_points[idx].astype(int))
-
-            cv2.circle(proj_img, target, 25, (0, 0, 255), -1)
-            cv2.putText(
-                proj_img,
-                f"Click Target {idx + 1}",
-                (target[0] - 80, target[1] - 35),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.9,
-                (255, 255, 255),
-                2
-            )
-
-            cv2.imshow("Projector Calibration", proj_img)
-            cv2.imshow("Kinect Depth Preview", depth_vis)
-            cv2.waitKey(1)
-
-        cv2.destroyWindow("Projector Calibration")
-
-        # Compute Perspective Homography Matrix
-        src = np.array(self.cam_points, dtype=np.float32)
-        dst = self.proj_points
-        homography_matrix, _ = cv2.findHomography(src, dst)
-        print("[Calibration] Homography Matrix computed successfully!\n")
-        return homography_matrix
+    @staticmethod
+    def _check_abort(display):
+        key = display.poll()
+        if key in (ord("q"), 27):
+            raise CalibrationAborted()

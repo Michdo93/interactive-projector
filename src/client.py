@@ -1,57 +1,75 @@
+"""Client (projector machine): receives touch events via UDP and drives the OS mouse.
+
+Also renders the calibration targets requested by the server. Works for both the
+Kinect v2 server (server.py) and the Kinect v1 server (server_v1.py).
+"""
+
 import json
 import os
 import socket
-import pyautogui
+import sys
 
-pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.001
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-def load_network_config():
-    config_path = os.path.join(
-        os.path.dirname(__file__), "..", "config_network.json"
-    )
-    with open(config_path, "r") as f:
-        return json.load(f)
+from common import build_arg_parser, load_config  # noqa: E402
+from mouse_output import MouseController  # noqa: E402
 
 
 def main():
-    config = load_network_config()
+    args = build_arg_parser("Interactive Projector - touch client", "config_network.json",
+                            mode="client").parse_args()
+    config = load_config(args.config)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((config["SERVER_BIND_IP"], config["UDP_PORT"]))
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((config["CLIENT_BIND_IP"], int(config["UDP_PORT"])))
+    sock.settimeout(0.02)
 
-    print(f"=== LAPTOP CLIENT ACTIVE ===")
-    print(f"Listening for touch events on port {config['UDP_PORT']}...")
+    mouse = MouseController(config["PROJECTOR_OFFSET_X"], config["PROJECTOR_OFFSET_Y"])
+    calib_window = None
 
-    is_mouse_down = False
+    print("=== CLIENT ACTIVE ===")
+    print(f"Listening for touch events on {config['CLIENT_BIND_IP']}:{config['UDP_PORT']} ...")
 
-    while True:
-        data, addr = sock.recvfrom(1024)
-        try:
-            packet = json.loads(data.decode("utf-8"))
-            event = packet.get("event")
-            x = int(packet.get("x", 0))
-            y = int(packet.get("y", 0))
+    try:
+        while True:
+            try:
+                data, _ = sock.recvfrom(4096)
+            except socket.timeout:
+                if calib_window is not None:
+                    calib_window.poll()   # keep the OpenCV window responsive
+                continue
 
-            if event == "down":
-                pyautogui.moveTo(x, y)
-                pyautogui.mouseDown(button="left")
-                is_mouse_down = True
-            elif event == "move":
-                pyautogui.moveTo(x, y)
-            elif event == "right_click":
-                if is_mouse_down:
-                    pyautogui.mouseUp(button="left")
-                    is_mouse_down = False
-                pyautogui.rightClick(x, y)
-            elif event == "up":
-                if is_mouse_down:
-                    pyautogui.mouseUp(button="left")
-                    is_mouse_down = False
+            try:
+                packet = json.loads(data.decode("utf-8"))
+                event = packet.get("event")
 
-        except Exception as e:
-            print(f"Error processing packet: {e}")
+                if event == "calib":
+                    if calib_window is None:
+                        from projector_display import ProjectorWindow
+                        calib_window = ProjectorWindow(
+                            config["PROJECTOR_WIDTH"], config["PROJECTOR_HEIGHT"],
+                            config["PROJECTOR_OFFSET_X"], config["PROJECTOR_OFFSET_Y"])
+                        print("[Calibration] Server requested calibration.")
+                    calib_window.show(packet["index"], packet["total"], packet["x"], packet["y"],
+                                      packet.get("progress", 0.0), packet.get("state", "touch"))
+                    calib_window.poll()
+                elif event == "calib_done":
+                    if calib_window is not None:
+                        calib_window.close()
+                        calib_window = None
+                        print("[Calibration] Finished.")
+                elif event in ("move", "down", "up", "click", "right_click"):
+                    mouse.handle(event, packet.get("x", 0), packet.get("y", 0))
+            except (ValueError, KeyError, TypeError) as e:
+                print(f"Invalid packet ignored: {e}")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        mouse.release()
+        if calib_window is not None:
+            calib_window.close()
+        sock.close()
 
 
 if __name__ == "__main__":

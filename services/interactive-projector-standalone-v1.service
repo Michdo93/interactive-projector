@@ -1,7 +1,6 @@
 [Unit]
-Description=Interactive Projector - Touch Receiver Client
-Wants=network-online.target
-After=network-online.target graphical.target
+Description=Interactive Projector - Standalone Touch (Kinect v1)
+After=graphical.target
 
 [Service]
 Type=simple
@@ -10,7 +9,7 @@ Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/ubuntu/.Xauthority
 Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=/home/ubuntu/interactive-projector
-ExecStart=/usr/bin/python3 /home/ubuntu/interactive-projector/src/client.py
+ExecStart=/usr/bin/python3 /home/ubuntu/interactive-projector/src/main_v1.py
 Restart=always
 RestartSec=5
 

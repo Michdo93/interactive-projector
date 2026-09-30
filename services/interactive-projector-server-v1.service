@@ -1,5 +1,5 @@
 [Unit]
-Description=Interactive Projector - Touch Processing Server (Kinect v2)
+Description=Interactive Projector - Touch Processing Server (Kinect v1)
 Wants=network-online.target
 After=network-online.target
 
@@ -7,7 +7,7 @@ After=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/interactive-projector
-ExecStart=/usr/bin/python3 /home/pi/interactive-projector/src/server.py
+ExecStart=/usr/bin/python3 /home/pi/interactive-projector/src/server_v1.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

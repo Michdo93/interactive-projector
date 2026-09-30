@@ -1,4 +1,16 @@
 numpy>=1.21.0
 opencv-python>=4.5.0
+# Mouse control - only needed on the standalone / client machine (not on a headless server)
 pyautogui>=0.9.50
+
+# ---- Kinect v2 ----
+# Windows (Kinect for Windows SDK 2.0). The PyPI release is outdated; the GitHub version is recommended:
+#   pip install git+https://github.com/Kinect/PyKinect2.git
 pykinect2>=0.1.0; platform_system=="Windows"
+# Linux / Raspberry Pi: build libfreenect2 first, then:
+#   pip install pylibfreenect2
+
+# ---- Kinect v1 ----
+# Linux / Raspberry Pi: sudo apt install freenect python3-freenect  (venv with --system-site-packages)
+# Windows (or Linux via OpenNI2):
+#   pip install openni

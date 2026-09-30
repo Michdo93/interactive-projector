@@ -1,12 +1,13 @@
 [Unit]
-Description=Interactive Projector - Standalone Touch
-After=network.target graphical.target
+Description=Interactive Projector - Standalone Touch (Kinect v2)
+After=graphical.target
 
 [Service]
 Type=simple
 User=ubuntu
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/ubuntu/.Xauthority
+Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=/home/ubuntu/interactive-projector
 ExecStart=/usr/bin/python3 /home/ubuntu/interactive-projector/src/main.py
 Restart=always

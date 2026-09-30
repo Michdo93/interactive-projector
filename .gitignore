@@ -20,3 +20,5 @@ Include/
 Lib/
 Scripts/
 pyvenv.cfg
+# Local calibration results
+calibration*.json
